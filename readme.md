@@ -1,7 +1,7 @@
 # Friendly Sharpness-Aware Minimization
 
-**Tao Li, Yingwen Wu, Sizhe Chen, Kun Fang and Xiaolin Huang**
+**Tao Li, Pan Zhou, Zhengbao He, Xinwen Cheng, Xiaolin Huang**
 
-**Paper:** http://arxiv.org/abs/2111.12229
+**Paper:** https://arxiv.org/html/2403.12350v1
 
-**CVPR 2022 oral**
+**CVPR 2024**
