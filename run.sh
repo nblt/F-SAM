@@ -10,7 +10,7 @@ rho=0.2
 sigma=1
 lmbda=0.95
 opt=FriendlySAM # FriendlySAM SAM
-DST=results_final_final/$opt/$datasets/$model/$opt\_cutout\_$rho\_$sigma\_$lmbda\_$epoch\_$model\_bz$bz\_wd$wd\_$datasets\_$schedule\_seed$seed
+DST=results/$opt/$datasets/$model/$opt\_cutout\_$rho\_$sigma\_$lmbda\_$epoch\_$model\_bz$bz\_wd$wd\_$datasets\_$schedule\_seed$seed
 
 CUDA_VISIBLE_DEVICES=$device python -u train.py --datasets $datasets \
         --arch=$model --epochs=$epoch --wd=$wd --randomseed $seed --lr 0.05 --rho $rho --optimizer $opt \
