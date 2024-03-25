@@ -77,10 +77,10 @@ parser.add_argument('--rho',  default=0.1, type=float,
                     metavar='RHO', help='rho for sam')
 parser.add_argument('--cutout', dest='cutout', action='store_true',
                     help='use cutout data augmentation')
-parser.add_argument('--alpha',  default=-1, type=float,
-                    metavar='A', help='alpha for FriendlySAM')
-parser.add_argument('--eta',  default=0.9, type=float,
-                    metavar='E', help='eta for FriendlySAM')
+parser.add_argument('--sigma',  default=1, type=float,
+                    metavar='S', help='sigma for FriendlySAM')
+parser.add_argument('--lmbda',  default=0.95, type=float,
+                    metavar='L', help='lambda for FriendlySAM')
 
 
 
@@ -249,12 +249,10 @@ def main():
     cudnn.benchmark = True
 
     # Prepare Dataloader
-    print ('alpha:', args.alpha)
+    print ('lambda:', args.lmbda)
     print ('cutout:', args.cutout)
     if args.cutout:
         train_loader, val_loader = get_datasets_cutout(args)
-    else:
-        train_loader, val_loader = get_datasets(args)
         
     print (len(train_loader))
     print (len(train_loader.dataset))
@@ -272,56 +270,16 @@ def main():
         base_optimizer = torch.optim.SGD
         optimizer = SAM(model.parameters(), base_optimizer, rho=args.rho, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, \
         nesterov=False)
-    elif args.optimizer == 'GSAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = GSAM(model.parameters(), base_optimizer, rho=args.rho, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, \
-        nesterov=False)
     elif args.optimizer == 'SAM_adamw':
         base_optimizer = torch.optim.AdamW
         optimizer = SAM(model.parameters(), base_optimizer, rho=args.rho, adaptive=0, lr=args.lr, weight_decay=args.weight_decay)        
-    elif args.optimizer == 'ASAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = SAM(model.parameters(), base_optimizer, rho=args.rho, adaptive=1, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-    elif args.optimizer == 'MSAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = MSAM(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)        
-    elif args.optimizer == 'SoftSAM1':
-        base_optimizer = torch.optim.SGD
-        optimizer = SoftSAM1(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)        
-    elif args.optimizer == 'PSAM_block':
-        base_optimizer = torch.optim.SGD
-        optimizer = PSAM_block(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)        
-    elif args.optimizer == 'PASAM_block':
-        base_optimizer = torch.optim.SGD
-        optimizer = PSAM_block(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=1, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)        
     elif args.optimizer == 'FriendlySAM':
         base_optimizer = torch.optim.SGD
-        optimizer = FriendlySAM(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay,\
+        optimizer = FriendlySAM(model.parameters(), base_optimizer, rho=args.rho, sigma=args.sigma, lmbda=args.lmbda, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay,\
             nesterov=False)          
     elif args.optimizer == 'FriendlySAM_adamw':
         base_optimizer = torch.optim.AdamW
-        optimizer = FriendlySAM(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, weight_decay=args.weight_decay)          
-    elif args.optimizer == 'FriendlySAM1_adamw':
-        base_optimizer = torch.optim.AdamW
-        optimizer = FriendlySAM1(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, weight_decay=args.weight_decay)          
-    elif args.optimizer == 'FriendlySAM1':
-        base_optimizer = torch.optim.SGD
-        optimizer = FriendlySAM1(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=False)          
-    elif args.optimizer == 'FriendlyASAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = FriendlySAM(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=1, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)          
-    elif args.optimizer == 'FriendlyASAM1':
-        base_optimizer = torch.optim.SGD
-        optimizer = FriendlySAM1(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=1, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)          
-    elif args.optimizer == 'FriendlyFisherSAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = FriendlyFisherSAM(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)          
-    elif args.optimizer == 'NestrovSAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = NestrovSAM(model.parameters(), base_optimizer, rho=args.rho, alpha=args.alpha, eta=args.eta, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)        
-    elif args.optimizer == 'FisherSAM':
-        base_optimizer = torch.optim.SGD
-        optimizer = FisherSAM(model.parameters(), base_optimizer, rho=args.rho, adaptive=0, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)        
+        optimizer = FriendlySAM(model.parameters(), base_optimizer, rho=args.rho, sigma=args.sigma, lmbda=args.lmbda, adaptive=0, lr=args.lr, weight_decay=args.weight_decay)          
 
     print (optimizer)
     if args.schedule == 'step':

@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models_imagenet
-from models.vit import ViT
 from models.pyramidnet import PyramidNet
 from timm.models.vision_transformer import VisionTransformer, _cfg
 from functools import partial
@@ -270,85 +269,6 @@ class cifar_dataloader():
                                 num_workers=self.num_workers, pin_memory=True)     
         return train_loader, val_loader
 
-
-def get_datasets_randaug(args):
-    print ('randaug!')
-    if args.datasets == 'CIFAR10':
-        print ('cifar10 dataset!')
-        normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-        transform_train = transforms.Compose([
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomCrop(32, 4),
-                transforms.Resize(32),
-                transforms.ToTensor(),
-                normalize,
-            ])
-        
-        N=2; M=14;
-        transform_train.transforms.insert(0, RandAugment(N, M))
-        transform_test = transforms.Compose([
-                transforms.Resize(32),
-                transforms.ToTensor(),
-                normalize,
-            ])
-
-        train_loader = torch.utils.data.DataLoader(
-            datasets.CIFAR10(root='./datasets/', train=True, transform=transform_train, download=True),
-            batch_size=args.batch_size, shuffle=True,
-            num_workers=args.workers, pin_memory=True)
-
-        val_loader = torch.utils.data.DataLoader(
-            datasets.CIFAR10(root='./datasets/', train=False, transform=transform_test),
-            batch_size=128, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
-        
-    elif args.datasets == 'CIFAR10-noise':
-        print('cifar10 nosie dataset!')
-        cifar10_noise = cifar_dataloader(dataset='cifar10', r=args.noise_ratio, noise_mode=args.noise_mode, 
-                                          batch_size=args.batch_size, num_workers=args.workers, cutout=args.cutout)
-        train_loader, val_loader = cifar10_noise.get_loader()
-        
-    elif args.datasets == 'CIFAR100':
-        print ('cifar100 dataset!')
-        normalize = transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-        
-        # if 'ViT' in args.arch or 'deit' in args.arch:
-        #     normalize = transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-        #     transform_train = transforms.Compose([transforms.RandomHorizontalFlip(),
-        #             transforms.Resize((args.img_size, args.img_size)),
-        #             transforms.ToTensor(), normalize, Cutout(),
-        #         ])
-        #     transform_test = transforms.Compose([
-        #             transforms.Resize((args.img_size, args.img_size)),
-        #             transforms.ToTensor(), normalize,
-        #         ])
-        # else:
-        transform_train = transforms.Compose([transforms.RandomHorizontalFlip(),
-                transforms.RandomCrop(32, 4), transforms.ToTensor(), normalize,
-            ])
-        N=2; M=14;
-        transform_train.transforms.insert(0, RandAugment(N, M))
-        transform_test = transforms.Compose([transforms.ToTensor(), normalize,
-            ])
-
-        train_loader = torch.utils.data.DataLoader(
-            datasets.CIFAR100(root='./datasets/', train=True, transform=transform_train, download=True),
-            batch_size=args.batch_size, shuffle=True,
-            num_workers=args.workers, pin_memory=True)
-
-        val_loader = torch.utils.data.DataLoader(
-            datasets.CIFAR100(root='./datasets/', train=False, transform=transform_test),
-            batch_size=128, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
-    
-    elif args.datasets == 'CIFAR100-noise':
-        print('cifar100 nosie dataset!')
-        cifar100_noise = cifar_dataloader(dataset='cifar100', r=args.noise_ratio, noise_mode=args.noise_mode, 
-                                          batch_size=args.batch_size, num_workers=args.workers, cutout=args.cutout)
-        train_loader, val_loader = cifar100_noise.get_loader()
-    
-    return train_loader, val_loader
-
 def get_datasets_cutout(args):
     print ('cutout!')
     if args.datasets == 'CIFAR10':
@@ -443,8 +363,69 @@ def get_model(args):
     return model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 
 
+class SAM(torch.optim.Optimizer):
+    def __init__(self, params, base_optimizer, rho=0.05, adaptive=False, **kwargs):
+        assert rho >= 0.0, f"Invalid rho, should be non-negative: {rho}"
+
+        defaults = dict(rho=rho, adaptive=adaptive, **kwargs)
+        super(SAM, self).__init__(params, defaults)
+
+        self.base_optimizer = base_optimizer(self.param_groups, **kwargs)
+        self.param_groups = self.base_optimizer.param_groups
+        self.defaults.update(self.base_optimizer.defaults)
+
+    @torch.no_grad()
+    def first_step(self, zero_grad=False):
+        grad_norm = self._grad_norm()
+        for group in self.param_groups:
+            scale = group["rho"] / (grad_norm + 1e-12)
+
+            for p in group["params"]:
+                if p.grad is None: continue
+                self.state[p]["old_p"] = p.data.clone()
+                e_w = (torch.pow(p, 2) if group["adaptive"] else 1.0) * p.grad * scale.to(p)
+                p.add_(e_w)  # climb to the local maximum "w + e(w)"
+
+        if zero_grad: self.zero_grad()
+
+    @torch.no_grad()
+    def second_step(self, zero_grad=False):
+        for group in self.param_groups:
+            for p in group["params"]:
+                if p.grad is None: continue
+                p.data = self.state[p]["old_p"]  # get back to "w" from "w + e(w)"
+
+        self.base_optimizer.step()  # do the actual "sharpness-aware" update
+
+        if zero_grad: self.zero_grad()
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        assert closure is not None, "Sharpness Aware Minimization requires closure, but it was not provided"
+        closure = torch.enable_grad()(closure)  # the closure should do a full forward-backward pass
+
+        self.first_step(zero_grad=True)
+        closure()
+        self.second_step()
+
+    def _grad_norm(self):
+        shared_device = self.param_groups[0]["params"][0].device  # put everything on the same device, in case of model parallelism
+        norm = torch.norm(
+                    torch.stack([
+                        ((torch.abs(p) if group["adaptive"] else 1.0) * p.grad).norm(p=2).to(shared_device)
+                        for group in self.param_groups for p in group["params"]
+                        if p.grad is not None
+                    ]),
+                    p=2
+               )
+        return norm
+
+    def load_state_dict(self, state_dict):
+        super().load_state_dict(state_dict)
+        self.base_optimizer.param_groups = self.param_groups
+
 class FriendlySAM(torch.optim.Optimizer):
-    def __init__(self, params, base_optimizer, rho=0.05, sgm=1, lmd=0.9, adaptive=False, **kwargs):
+    def __init__(self, params, base_optimizer, rho=0.05, sigma=1, lmbda=0.9, adaptive=False, **kwargs):
         assert rho >= 0.0, f"Invalid rho, should be non-negative: {rho}"
 
         defaults = dict(rho=rho, adaptive=adaptive, **kwargs)
@@ -453,9 +434,9 @@ class FriendlySAM(torch.optim.Optimizer):
         self.base_optimizer = base_optimizer(self.param_groups, **kwargs)
         self.param_groups = self.base_optimizer.param_groups
         self.defaults.update(self.base_optimizer.defaults)
-        self.alpha = alpha
-        self.eta = eta
-        print ('FriendlySAM sigma:', self.sgm, 'lambda:', self.lmd)
+        self.sigma = sigma
+        self.lmbda = lmbda
+        print ('FriendlySAM sigma:', self.sigma, 'lambda:', self.lmbda)
 
     @torch.no_grad()
     def first_step(self, zero_grad=False):
@@ -466,8 +447,8 @@ class FriendlySAM(torch.optim.Optimizer):
                 if not "momentum" in self.state[p]:
                     self.state[p]["momentum"] = grad
                 else:
-                    p.grad += self.state[p]["momentum"] * self.alpha
-                    self.state[p]["momentum"] = self.state[p]["momentum"] * self.eta + grad * (1 - self.eta)
+                    p.grad -= self.state[p]["momentum"] * self.sigma
+                    self.state[p]["momentum"] = self.state[p]["momentum"] * self.lmbda + grad * (1 - self.lmbda)
             
         grad_norm = self._grad_norm()
         for group in self.param_groups:
