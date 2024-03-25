@@ -3,7 +3,7 @@
 The code is the official implementation of our CVPR 2024 paper 
 [Friendly Sharpness-Aware Minimization](https://arxiv.org/html/2403.12350v1).
 
-In this work, we reveal that the full gradient component in SAM’s adversarial perturbation does not contribute to generalization and, in fact, has undesirable effects. We then propose an efficient variant to mitigate these effects and further enhance the generalization performance of SAM.
+In this work, we reveal that the full gradient component in SAM’s adversarial weight perturbation does not contribute to generalization and, in fact, has undesirable effects. We then propose an efficient variant to mitigate these effects and solely utilize batch-wise stochastic gradient noise for weight perturbation. It further enhances the generalization performance of SAM and provides a fresh understanding on SAM's practical success.
 
 ![Illustration of F-SAM](fsam.png)
 
