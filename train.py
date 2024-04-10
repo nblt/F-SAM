@@ -318,10 +318,6 @@ def main():
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
         }, is_best, filename=os.path.join(args.save_dir, 'model.th'))
-
-    print ('final')
-    bn_update(train_loader, model)
-    validate(val_loader, model, criterion)
     
     print ('train loss: ', train_loss)
     print ('train err: ', train_err)
