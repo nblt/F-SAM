@@ -442,7 +442,8 @@ class FriendlySAM(torch.optim.Optimizer):
     def first_step(self, zero_grad=False):
 
         for group in self.param_groups:
-            for p in group["params"]:               
+            for p in group["params"]:      
+                if p.grad is None: continue       
                 grad = p.grad.clone()
                 if not "momentum" in self.state[p]:
                     self.state[p]["momentum"] = grad
