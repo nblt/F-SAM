@@ -8,7 +8,7 @@ epoch=200
 bz=128
 rho=0.2
 sigma=1
-lmbda=0.95
+lmbda=0.6
 opt=FriendlySAM # FriendlySAM SAM
 DST=results/$opt/$datasets/$model/$opt\_cutout\_$rho\_$sigma\_$lmbda\_$epoch\_$model\_bz$bz\_wd$wd\_$datasets\_$schedule\_seed$seed
 
